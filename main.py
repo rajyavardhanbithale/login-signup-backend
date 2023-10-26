@@ -13,6 +13,11 @@ from message import message
 from verification import otp_manager as otp
 from verification import url_verification 
 
+from user import delete_user
+from user import update_user
+from user import save_ip_address
+from user import resend_otp
+
 load_dotenv()
 dev = os.getenv("DEV")
 load_key = os.getenv("VERIFICATION_KEY")
@@ -89,24 +94,9 @@ routes = [
     "/otp/verify",      #[6]
     "/otp/resend"       #[7]
 ] 
-
-# Save IP
-def save_ip(data_name:str,cup:bool, request:Request):
-     # Saving IP
-    if cup:    
-        client_host = request.client.host
-        update_data = {"$push": 
-            {
-                f"ip.{data_name}.timestamp":time.time(),
-                f"ip.{data_name}.ip":client_host,
-            }
-        }
-        result = collection.update_one({"_id":cup['_id']}, update_data)
  
 def otp_expire(minutes):
     return time.time() + (minutes*60)
-
-
 
 # Home
 @app.get("/") #routes[0]
@@ -124,7 +114,10 @@ async def login(user:GetUser,requst:Request):
             "password":user.password                         
     }) 
     
-    save_ip(data_name="ip_login",cup=check_username_password,request=requst)      
+    save_ip_address.save_ip_address(collection=collection,
+                                    data_name="ip_login",
+                                    check_username_password=check_username_password,
+                                    request=requst)      
 
     if check_username_password and otp.check_if_user_verified(check_user=check_username_password):
         raise HTTPException(status_code=200,detail="login OK")
@@ -179,26 +172,15 @@ async def delete(user:GetUser,request:Request):
     
     is_verified = otp.check_if_user_verified(check_user=check_username_password)
     
-   
-   
-    if(check_username_password and is_verified):
-        collection_delete.insert_one({
-                "timestamp":time.time(),
-                "username":user.username,
-                "ip": request.client.host
-        })
+    delete_user.delete_user(check_username_password=check_username_password,
+                            is_verified=is_verified,
+                            collection_delete=collection_delete,
+                            collection=collection,
+                            request=request,
+                            user=user)
     
-    if(is_verified):
-        delete_user = collection.delete_one({
-                "username":user.username,
-                "password":user.password
-
-        })
-
-        if delete_user.raw_result["n"] ==1:
-            return{"detail":"user deleted"}
-    
-    raise HTTPException(status_code=401,detail="invalid [username : password] or user does not exsist ")
+   
+    return ""
 
 # Update 
 @app.put("/update/password") #routes[4]
@@ -210,22 +192,14 @@ async def update(user:UpdateUser,request:Request):
 
     is_verified = otp.check_if_user_verified(check_user=check_username_password)
 
-    if check_username_password and is_verified:
-        # Setting Old Password In DB
-        update_data = {"$set": {"old_password": user.old_password}}
-        result = collection.update_one({"username":user.username}, update_data)
+    update_user.updatee_user(check_username_password=check_username_password,
+                             collection=collection,
+                             user=user,
+                             is_verified=is_verified,
+                             request=request
+                             )
 
-        if check_username_password["password"] != user.new_password:        
-            update_data = {"$set": {"password": user.new_password}}
-            result = collection.update_one({"username":user.username}, update_data)
-             
-            if result.raw_result['nModified'] == 1:
-                save_ip(data_name="ip_update",cup=check_username_password,request=request)
-                return {"detail":"password updated"}
-        else:
-             raise HTTPException(status_code=400,detail="new password cannot be same as new")
-
-    raise HTTPException(status_code=401,detail="invalid [username : password] or user does not exsist")
+    return " "
 
 
 # User
@@ -262,39 +236,21 @@ async def verify_user_with_url(enc_url:str):
     check_user = collection.find_one({
         "username": decrypted_data["username"],
         "email": decrypted_data["email"]
-    })
-
-    
-    url_verification.user_url_verification(collection=collection,check_user=check_user,decrypted_data=decrypted_data)
-
-
+    })    
+    url_verification.user_url_verification(collection=collection
+                                           ,check_user=check_user,
+                                           decrypted_data=decrypted_data)
     return ""
 
 
 
 @app.post("/otp/resend") #routes[7]
-async def resend_otp(user:GetUser):
+async def resend_otp_user(user:GetUser):
     check_username = collection.find_one({
             "username":user.username,
             "password":user.password                         
     }) 
     
-    
-    if(check_username):
-        if(check_username["is_verified"]=="false"):
-            update_otp = collection.update_one(
-                {"username":user.username},
-                {
-                    "$set":{
-                        "otp_verification.otp":otp.otp_generate(5),
-                        "otp_verification.expiration_time":otp.otp_expire(5)
-                    }
-                })
-
-            if update_otp.raw_result['nModified'] == 1:
-                raise HTTPException(status_code=200,detail="otp send successfully")
-            
-        else:
-            raise HTTPException(status_code=200,detail="user already verified")
-        
-    raise HTTPException(status_code=401,detail="user doesn't exist")
+    resend_otp.resend_otp(check_username=check_username,
+                          collection=collection,
+                          user=user)
