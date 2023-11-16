@@ -41,10 +41,10 @@ class User(BaseModel):
     first_name: str
     last_name: str
     email: str
-    phone_number:str
-
+    phone_number:str = None
     username:str = None
     password: str
+    confirm_password:str
 
     ip_creation: str = None
 
@@ -130,6 +130,9 @@ async def login(user:GetUser,requst:Request):
 # Signup
 @app.post("/signup") #routes[2]
 async def signup(user:User,request:Request):
+
+    if user.password != user.confirm_password:
+        raise HTTPException(status_code=403,detail="Forbidden")
 
     client_host = request.client.host
 

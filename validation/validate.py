@@ -38,7 +38,8 @@ def return_data(data: str, ip: str,timestamp:int,otp:int,exp_time:int) -> dict:
 	userData["fname"] = (data.first_name).lower()
 	userData["lname"] = (data.last_name).lower()
 	userData["email"] = data.email
-	userData["ph_number"] = data.phone_number.split()
+
+	userData["ph_number"] = data.phone_number.split() if data.phone_number else " "
 	userData["username"] = data.username
 	userData["password"] = data.password
 
@@ -54,19 +55,20 @@ def validate_data(data):
 		missing.append("last_name")
 	if not data.email:
 		missing.append("email")
-	if not data.phone_number:
-		missing.append("phone_number")
+
+
 
 	# Phone Number Analysis
-	phone_number = data.phone_number.split()
-	if len(phone_number[1]) != 10:
-		missing.append("invalid phone number")
-	if len(phone_number[0]) > 3:
-		missing.append("invalid country code")
+	if data.phone_number:
+		phone_number = data.phone_number.split()
+		if len(phone_number[1]) != 10:
+			missing.append("invalid phone number")
+		if len(phone_number[0]) > 3:
+			missing.append("invalid country code")
 
-	if any(char.isalpha() for char in data.phone_number):
-		missing.append(
-			"invalid phone number : phone number does not any contain alphabet")
+		if any(char.isalpha() for char in data.phone_number):
+			missing.append(
+				"invalid phone number : phone number does not any contain alphabet")
 
 	# Password Analysis
 	if len(data.password) < 8:
